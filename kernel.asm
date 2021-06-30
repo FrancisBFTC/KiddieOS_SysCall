@@ -59,7 +59,7 @@ OSMain:
 	; Define to Real Mode 16-bit
 	; Sander
 	mov 	byte[SYSC_MNG+3], SYSTEM-1  
-	call 	SYSC_MNG        ; <- The problem is within this code -> SysC_Mng.asm
+	call 	SYSC_MNG        ; <- The problem NOT occurs Here -> SysC_Mng.asm : "GoTo16" Routine
 	
 	
 	; Text Mode
@@ -70,7 +70,7 @@ OSMain:
 	; Load 32-bit GDT and IDT into CPU and switch to protected mode
 	; Sander
 	mov 	byte[SYSC_MNG+3], 32
-	call 	SYSC_MNG       ; <- The problem is within this code -> SysC_Mng.asm
+	call 	SYSC_MNG       ; <- The problem is within this code -> SysC_Mng.asm : "GoTo32" Routine
 	
 	xor 	ax, ax
 	int 	16h
