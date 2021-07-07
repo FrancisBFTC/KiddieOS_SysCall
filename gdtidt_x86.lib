@@ -1,0 +1,112 @@
+; ==================================================================
+; Base = Addr1 + Addr2 + Addr3 (0x00000000)
+; Segmento Limite = Size1 + Size2 (0xFFFFF)
+; Estrutura GDT para 32-bit
+; Contém descritor de código e dados
+
+align 4
+GDT:
+	.Size    dw GDT_End - GDT_Start - 1		; Tamanho do GDT
+	.Address dd GDT_Start    			 	; Endereço Inicial do GDT
+
+align 4
+GDT_Start:
+	dd 0
+    dd 0
+
+	; Descritor de código 32-bit
+	; CS deve apontar para este descritor
+	.Code32: 
+		.C32Size1    dw 0xFFFF	     ; Tamanho do segmento (primeiros 0-15 bits)
+		.C32Addr1    dw 0x0000      ; Endereço de base (0-15 bits) (Linear Address - 0x0800)
+		.C32Addr2    db 0x00        ; Endereço de base (16-23 bits)
+		.C32AccType  db 0x9A        ; Tipo de acesso (10011010b)
+		.C32F_Size2  db 0xCF  ; Flags (F) = High 4 bits, Size2 = Low 4 bits (Size = 20 bits)
+		.C32Addr3    db 0x00        ; Endereço de base (24-31 bits)
+	   
+	; Descriptor de dados 4GB 
+	; DS, SS, ES, FS e GS devem apontar para este descritor
+	.Data32: 
+		.D32Size1    dw 0xFFFF	     ; Tamanho de segmento (primeiros 0-15 bits)
+		.D32Addr1    dw 0x0000      ; Endereço de base (0-15 bits) (Linear Address - 0x0800)
+		.D32Addr2    db 0x00        ; Endereço de base (16-23 bits)
+		.D32AccType  db 0x92        ; Tipo de acesso (10010010b)
+		.D32F_Size2  db 0xCF  ; Flags (F) = High 4 bits, Size2 = Low 4 bits (Size = 20 bits)
+		.D32Addr3    db 0x00        ; Endereço de base (24-31 bits)
+		
+	; Descritor de código 16-bit
+	; CS deve apontar para este descritor
+	.Code16: 
+		.C16Size1    dw 0xFFFF	     ; Tamanho do segmento (primeiros 0-15 bits)
+		.C16Addr1    dw 0x0000      ; Endereço de base (0-15 bits) (Linear Address - 0x0800)
+		.C16Addr2    db 0x00        ; Endereço de base (16-23 bits)
+		.C16AccType  db 0x9A        ; Tipo de acesso (10011010b)
+		.C16F_Size2  db 0x8F  ; Flags (F) = High 4 bits, Size2 = Low 4 bits (Size = 20 bits)
+		.C16Addr3    db 0x00        ; Endereço de base (24-31 bits)
+	   
+	; Descriptor de dados 4GB 
+	; DS, SS, ES, FS e GS devem apontar para este descritor
+	.Data16: 
+		.D16Size1    dw 0xFFFF	     ; Tamanho de segmento (primeiros 0-15 bits)
+		.D16Addr1    dw 0x0000      ; Endereço de base (0-15 bits) (Linear Address - 0x0800)
+		.D16Addr2    db 0x00        ; Endereço de base (16-23 bits)
+		.D16AccType  db 0x92        ; Tipo de acesso (10010010b)
+		.D16F_Size2  db 0x8F  ; Flags (F) = High 4 bits, Size2 = Low 4 bits (Size = 20 bits)
+		.D16Addr3    db 0x00        ; Endereço de base (24-31 bits)
+		
+GDT_End:
+
+CODE_SEG32 EQU GDT_Start.Code32 - GDT_Start
+DATA_SEG32 EQU GDT_Start.Data32 - GDT_Start
+CODE_SEG16 EQU GDT_Start.Code16 - GDT_Start
+DATA_SEG16 EQU GDT_Start.Data16 - GDT_Start
+
+; ==================================================================
+
+
+IDTBASE  EQU  0x00000000
+IDTSIZE  EQU  256
+
+; ==================================================================
+; Estrutura IDT (Interrupt Descriptor Table) - Real Mode
+; Contém o descriptor de 32-bit & 16-bit
+; O Limite é de 1023 (256 * 4) - 1
+align 4
+IDT16:
+	.IDT_Size16  dw (IDTSIZE * 4) - 1
+	.IDT_Addr16  dd IDTBASE
+
+IDT32:
+	.IDT_Size32  dw IDT_End - IDT_Start - 1
+	.IDT_Addr32  dd IDT_Start
+
+; ==================================================================
+
+; ==================================================================
+; Descriptors IDT
+
+
+IDT_Start:
+	IRQ0:
+		.Offset0_15  dw 0x0000
+		.Selector    dw 0x0008
+		.Unused      db 0x00
+		.TypeAttr	 db 0x8E  ;INT GATE
+		.Offset16_31 dw 0x0000
+	IRQ1:
+		.Offset0_15  dw 0x0000
+		.Selector    dw 0x0008
+		.Unused      db 0x00
+		.TypeAttr	 db 0x8E  ;INT GATE
+		.Offset16_31 dw 0x0000
+		
+	TIMES IDTSIZE - 2 DQ 0x00000008008E0000
+IDT_End:
+
+Vector.Address:
+	DD 	0x00000000 ; <- Reserved
+	DD 	LIB_String32
+	TIMES IDTSIZE - 2 DD 0x00000000
+; ==================================================================
+
+
