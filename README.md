@@ -1,4 +1,4 @@
-# KiddieOS SysCall (KiddieOS v1.2.5)
+# KiddieOS SysCall (KiddieOS v1.2.6)
 
 E um repositorio dedicado a Syscall do KiddieOS (Chamadas de sistemas) em 32 bits. Neste repositorio contem:
 
