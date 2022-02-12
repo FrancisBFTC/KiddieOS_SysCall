@@ -22,8 +22,10 @@
 %DEFINE  Write_Info 			0024h
 %DEFINE  Print_Name_File        0027h
 %DEFINE  Wmanager_Start         002Ah 
-%DEFINE  Print_Hexa_Value8      002Dh    
-%DEFINE  Reboot_System          0030h
+%DEFINE  Print_Hexa_Value8      002Dh
+%DEFINE  Play_Sound             0030h
+%DEFINE  Print_Dec_Value32      0033h    
+%DEFINE  Reboot_System          0036h
 
 
 %ENDIF
