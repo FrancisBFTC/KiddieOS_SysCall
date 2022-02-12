@@ -1,17 +1,24 @@
+ADDRESS EQU 0x112000
+
 ORG   0
 ALIGN 4
-
-PROGRAM EQU 0x110200
-Program32: 
-
 BITS 32
-SECTION protectedmode vstart=PROGRAM, valign=4
-
-jmp 	_MAIN
-
+SECTION protectedmode vstart=ADDRESS, valign=4
 %DEFINE EQ ,
 %DEFINE Prints(ARG1, ARG2, ARG3)  Write ARG1, ARG2, ARG3
 %DEFINE Main(ARG1, ARG2) .Main ARG1, ARG2
+%DEFINE _ENTRY(FUNC) (FUNC - SIZE_PROG)
+
+; ---------------------------------------------------------
+; Estrutura de Executável KiddieOS
+
+START_PROG:
+	OPCODE:     db 0xE9
+	ENTRY:      dd _ENTRY(_MAIN)
+	SIZE_PROG: 	dd (END_PROG - START_PROG)
+	ADDR_PROG:	dd ADDRESS
+; ---------------------------------------------------------
+
 
 ; ============================================
 ; Entry & End of program
@@ -28,6 +35,8 @@ jmp 	_MAIN
 		popad
 		mov 	ax, 0
 		retf
+	END_PROG:
+		nop
 %ENDMACRO
 
 ; ============================================
@@ -86,15 +95,15 @@ jmp 	_MAIN
 			mov 	ecx, 1
 	%ENDIF
 		mov 	dl, %2
-		call 	0x08:LIB.SYSCALL__WRITE
+		call 	0x08:LIB.SYS__WRITE
 %ENDMACRO
 
 ; ============================================
 
 LIB:
-.SYSCALL__WRITE:
+.SYS__WRITE:
 	pushad
 	mov 	eax, 0
-	int 	0x01
+	int 	0xCE
 	popad
 retf	
