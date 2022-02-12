@@ -1,5 +1,6 @@
 %INCLUDE "Hardware/memory.lib"
 %INCLUDE "Hardware/kernel.lib"
+%INCLUDE "Hardware/iodevice.lib"
 ;%INCLUDE "Hardware/iodevice.lib"
 
 [BITS 16]
@@ -7,11 +8,12 @@
 
 jmp 	_SYSCALL_MAIN
 
+
 STACK32_TOP  	EQU 0x200000
 CODE32_VRAM  	EQU 0x110000
 VIDEO_MEMORY    EQU 0x0B8000
-PROGRAM_BUFFER  EQU 0x9000
-PROGRAM_VRAM    EQU CODE32_VRAM+0x200
+PROGRAM_BUFFER  EQU 0x90000  ; 0009h:0000h
+PROGRAM_VRAM    EQU CODE32_VRAM+0x2000
  
 Return_Value dw 0
 Counter 	 db 0
@@ -31,7 +33,31 @@ SwitchTo32BIT:
 	call 	EnableA20       ; Habilite o portão A20 (usa o método rápido como prova de conceito)
     cli
 	
-	mov		ax, 0x0800
+	push 	dx
+	
+	; // ICW1
+    __WritePort 0x20, 0x11  ; Reinicia o controlador
+    __WritePort 0xA0, 0x11
+
+   ; // ICW2
+    __WritePort 0x21, 0x20  ; Vetores de interrupção
+    __WritePort 0xA1, 0x28
+
+    ;// ICW3
+    __WritePort 0x21, 0x04
+    __WritePort 0xA1, 0x02
+
+    ;// ICW4
+    __WritePort 0x21, 0x01
+    __WritePort 0xA1, 0x01
+
+    ; // OCW1
+    __WritePort 0x21, 0x00  ; Habilita as interrupções (Não-Mascaráveis)
+    __WritePort 0xA1, 0x00
+	
+	pop 	dx
+	
+	mov		ax, 0x0C00
 	mov		ds,ax
 	
     mov 	eax,cs          ; EAX = CS
@@ -58,11 +84,10 @@ FillIDT:
 	loop 	FillIDT
 	pop 	eax
 	
-	
 	add 	[GDT+2], eax           ; Adicione o endereço linear básico ao endereço GDT_Start
-    lgdt 	[GDT] 
+    lgdt 	[GDT]
 	add 	[IDT32+2], eax
-	
+
 	; Calcule o endereço linear dos rótulos usando (segmento << 4) + deslocamento.
     ; EBX já é (segmento << 4). Adicione-o aos deslocamentos dos rótulos para
     ; converta-os em endereços lineares
@@ -90,9 +115,7 @@ NotLoadStructsAgain:
     mov 	cr0,eax         			; Definir sinalizador de modo protegido
 	
     jmp 	dword far [bp]
-                      
-	
-	
+                      	
 ; Habilite a20 (método rápido). Isso pode não funcionar em todos os hardwares
 EnableA20:
     cli
@@ -127,6 +150,7 @@ ProtectedMode16:
     and 	eax, 0x7FFFFFFE     
 	mov 	cr0, eax
 	
+	
 	push 	cx
 	push 	RealMode16
 	retf
@@ -150,7 +174,23 @@ RealMode16:
 	inc 	byte[Counter]
 ret
 
+; --------------------------------------------
+
+Ini_Mode8086: call 	bx
+
+; Pode ser inserido outras rotinas v86 aqui
+
+mov 	eax, 0xFFFF
+hlt
+	
+; --------------------------------------------
+
+ERROR:
+	int 0x18
+	
 %INCLUDE "Hardware/gdtidt_x86.lib"
+
+
 
 ; Código que será executado no modo protegido de 32 bits
 ;
@@ -163,6 +203,7 @@ ALIGN 4
 Code32Bit:
 BITS 32
 
+	
 SECTION protectedmode vstart=CODE32_VRAM, valign=4
 
 Start32:
@@ -203,54 +244,51 @@ Start32:
 	
 
 EntryCode32:
-	
 	mov 	byte[CursorRaw], dh
 	mov 	byte[CursorCol], dl
 	
+	cmp 	byte[Counter+0xC000], 0
+	ja 		NoLoadTSSAgain
+	mov 	dword[TSS.ESP0], esp
+	mov 	word [TSS.SS0],  ss
+	mov 	ax, 0x28
+	ltr 	ax
+NoLoadTSSAgain:
+	sti
 	mov 	edi,PROGRAM_VRAM       ; EDI = Endereço linear para onde o programa sera copiado
     mov 	esi,PROGRAM_BUFFER     ; ESI = Endereço Linear do programa (0x0900:0)
-    mov 	cx,157                 ; ECX = numero de DWORDs para copiar
+    mov 	ecx, DWORD[PROGRAM_BUFFER+5]              ; ECX = numero de DWORDs para copiar
     rep 	movsb	   	           ; Copiar todas as ECX dwords de ESI para EDI 
     call 	CODE_SEG32:PROGRAM_VRAM   ; Salto absoluto para o novo endereço
 	
+	;mov 	eax, 2
+	;mov 	edi, PROGRAM_VRAM
+	;mov 	esi, WindowManager
+	;int 	0xCE
+	;call 	CODE_SEG32:PROGRAM_VRAM
+	
+	mov 	WORD [Return_Value], ax
+	
 	mov 	dh, byte[CursorRaw]
-	mov 	dl, byte[CursorRaw]
+	mov 	dl, byte[CursorCol]
 	mov 	si, dx
 	
-	push 	eax
-	mov 	al, 0
-	mov 	edi, PROGRAM_VRAM
-	mov 	cx, 157
-	rep 	stosb
+	;push 	eax
+	;mov 	al, 0
+	;mov 	edi, PROGRAM_VRAM
+	;mov 	cx, 5887 ;157
+	;rep 	stosb
 
-	mov 	edi, PROGRAM_BUFFER
-	mov 	cx, 157
-	rep 	stosb
-	pop 	eax
-	
+	;mov 	edi, PROGRAM_BUFFER
+	;mov 	cx, 5887  ;157
+	;rep 	stosb
+	;pop 	eax	
 retf
-
-
-	; INT 0x01 : Interrupção de Vídeo  ------------
-	; ---------------------------------------------
-	; Função 0 		-> Exibir uma String na tela
-	; Parâmetros: 	EAX = Função
-	; 				ESI = String
-	;				DL  = Cor de fundo|Texto
-	;				ECX = Tamanho da String
-	;Retorno: 		Nenhum
-	
-	; Função 1 		->  Pegar uma String da tela
-	; Parâmetros: 	EAX = Função
-	; 				EDI = Buffer
-	;				DH  = Coluna
-	; 				DL  = Linha
-	;				ECX = Tamanho do Buffer
-	; Retorno: 		Nenhum
-	; ---------------------------------------------
+WindowManager  db "WINMNG32KXE"
 
 BITS 32
 LIB_String32:
+	push 	ebx
 	xor 	ebx, ebx
 	mov 	bx, ax
 	shl 	ebx, 2
@@ -259,10 +297,14 @@ LIB_String32:
 	
 MonitorRoutines:
 	dd Print_String32
+	dd Print_Zero_Terminated
 	dd Get_String
+	dd Load_File
+	dd Get_Device
 	
 	
 Print_String32:
+	pop 	ebx
 	pushad
 	push 	edx
 	push 	ecx
@@ -294,16 +336,514 @@ iretd
 CursorRaw  db 0
 CursorCol  db 0
 
-Get_String:
+Print_Zero_Terminated:
+	pop 	ebx
 	pushad
-	mov 	esi, VIDEO_MEMORY
-Get_S:
-    mov 	al,byte [esi]
-    mov 	byte [ds:edi],al 
+	push 	edx
+	xor 	cx, cx
+	xor 	eax, eax
+	mov 	edi, VIDEO_MEMORY
+	mov 	dh, byte[CursorRaw]
+	mov 	al, (80*2)
+	mov 	cl, dh
+	mul 	cl
+	mov 	cl, byte[CursorCol]
+	shl 	cl, 1
+	add 	ax, cx
+	add 	edi, eax
+	pop 	edx
+Start_PZT:
+    mov 	al,byte [ds:esi]
+	cmp 	al, 0
+	jz 		Exit_PZT
+    mov 	byte [edi],al 
+    inc 	edi 
+    mov 	al, dl
+    mov 	byte [edi],al 
+	inc 	esi
 	inc 	edi
-	add 	esi, 2
+	jmp 	Start_PZT
+Exit_PZT:
+	popad
+	inc 	byte[CursorRaw]
+iretd
+
+Get_String:
+	pop 	ebx
+	pushad
+	;mov 	al,byte [esi]
+    ;mov 	byte [ds:edi],al 
+	;inc 	edi
+	;add 	esi, 2
+	mov 	esi, VIDEO_MEMORY
+	mov 	al, 160
+	mul 	dl
+	mov 	bh, dh
+	shl 	bh, 1
+	add 	ax, bx
+	add 	esi, eax
+Get_S:
+    movsb       
+	inc 	esi
 	loop 	Get_S
 	popad
 iretd
+
+
+LoadFile               EQU (FAT16+9)
+LoadRest               EQU (FAT16+12)
+SYS.VM                 EQU ((FAT16+20) + 0C000h)
+PTR_FILE               EQU ((FAT16+21) + 0C000h)
+V86_STACK_SEG          EQU 0x3000  ; v8086 stack SS
+V86_STACK_OFS          EQU 0xFFFF  ; v8086 stack SP
+V86_CS_SEG             EQU 0x0C00  ; v8086 code segment CS
+EFLAGS_VM_BIT          EQU 17      ; EFLAGS VM bit
+EFLAGS_BIT1            EQU 1       ; EFLAGS bit 1 (reserved, always 1)
+EFLAGS_IF_BIT          EQU 9       ; EFLAGS IF bit
+EFLAGS_ID_BIT          EQU 21
+EFLAGS_VIF_BIT         EQU 19
+EFLAGS_NT_BIT          EQU 14
+TSS.EFLAGS             EQU TSS_Start.EFLAGS+0C000h
+TSS.EAX                EQU TSS_Start.EAX+0C000h
+TSS.EBX                EQU TSS_Start.EBX+0C000h
+TSS.ECX                EQU TSS_Start.ECX+0C000h
+TSS.EDX                EQU TSS_Start.EDX+0C000h
+TSS.ESP                EQU TSS_Start.ESP+0C000h
+TSS.EBP                EQU TSS_Start.EBP+0C000h
+TSS.ESI                EQU TSS_Start.ESI+0C000h
+TSS.EDI                EQU TSS_Start.EDI+0C000h
+TSS.ESP0               EQU TSS_Start.ESP0+0C000h
+TSS.SS0                EQU TSS_Start.SS0+0C000h
+TSS.ES                 EQU TSS_Start.ES+0C000h
+TSS.DS                 EQU TSS_Start.DS+0C000h
+TSS.FS                 EQU TSS_Start.FS+0C000h
+TSS.GS                 EQU TSS_Start.GS+0C000h
+TSS.SS                 EQU TSS_Start.SS+0C000h
+
+Load_File:
+	pop 	ebx
+	
+	mov 	byte[SYS.VM], 1
+	mov 	ecx, 11
+	push 	edi
+	push 	esi
+	mov 	edi, PTR_FILE
+	rep 	movsb
+	pop 	esi
+	pop 	edi
+	
+	mov 	ebx, LoadFile
+	
+	mov 	eax, cr4
+	and 	eax, 0xFFFFFFFC
+	or  	eax, 11b 	          ; -> CR4.PVI = 1, CR4.VME = 1
+	mov 	cr4, eax
+	
+	mov 	dword[TSS.ESP0], esp
+	
+SwitchVMode:
+	mov 	ecx, (512*8) / 4  ; BytesPerSector x SectorsPerCluster / DWORD_SIZE
+	jmp 	Run8086Program
+
+Back8086Program:
+	mov 	ax, word[TSS.ES]
+	mov 	es, ax
+	mov 	ds, ax
+	mov 	fs, ax
+	mov 	gs, ax
+	mov 	ss, ax
+	mov 	eax, dword[TSS.EAX]
+	mov 	ebx, dword[TSS.EBX]
+	mov 	ecx, dword[TSS.ECX] 
+	mov 	edx, dword[TSS.EDX]
+	mov 	esp, dword[TSS.ESP]
+	mov 	ebp, dword[TSS.EBP]
+	mov 	edi, dword[TSS.EDI]
+	mov 	esp, dword[TSS.ESP0]
+	mov 	ss,  word[TSS.SS0]
+CopyData:
+	mov 	esi, 0x50000
+	rep 	movsd
+	mov 	esi, dword[TSS.ESI]
+	mov 	ebx, LoadRest
+	cmp 	byte[SYS.VM], 1
+	je 		SwitchVMode
+	mov 	ecx, (512*8) / 4
+	mov 	eax, 0
+	mov 	edi, 0x50000
+	rep 	stosd
+	mov 	eax, cr4
+	and 	eax, 0xFFFFFFFC
+	mov 	cr4, eax
+iretd
+	
+
+Run8086Program:
+	mov 	dword[TSS.EAX], eax
+	mov 	dword[TSS.EBX], ebx
+	mov 	dword[TSS.ECX], ecx
+	mov 	dword[TSS.EDX], edx
+	mov 	dword[TSS.ESP], esp
+	mov 	dword[TSS.EBP], ebp
+	mov 	dword[TSS.ESI], esi
+	mov 	dword[TSS.EDI], edi
+	mov 	ax, es
+	mov 	word[TSS.ES], ax
+	mov 	word[TSS.DS], ax
+	mov 	word[TSS.FS], ax
+	mov 	word[TSS.GS], ax
+	mov 	word[TSS.SS], ax
+	mov		ax, 0x07C0
+	mov  	edx, 0C00h
+    push 	edx
+    push 	edx
+    push 	edx
+    push 	edx
+    push 	V86_STACK_SEG
+    push 	V86_STACK_OFS
+    push 	dword 1<<EFLAGS_VM_BIT | 1<<EFLAGS_BIT1 | 1<<EFLAGS_ID_BIT
+    push 	V86_CS_SEG   
+    push 	Ini_Mode8086
+iret
+	
+Get_Device:
+	pop 	ebx
+	push 	ecx
+	mov 	edi,0x150000       ; EDI = Endereço linear para onde o programa sera copiado
+    mov 	esi, (PCI+0xC000)    ; ESI = Endereço Linear do programa (0x0900:0)
+    mov 	ecx, (PCI_NUM_SECTORS*512)               ; ECX = numero de DWORDs para copiar
+    rep 	movsb	   	           ; Copiar todas as ECX dwords de ESI para EDI
+	pop 	ecx
+	mov 	al, bh
+    call 	0x150000+5
+iret
+
+LIB_Graphic32:
+	push 	ebx
+	xor 	ebx, ebx
+	mov 	bx, ax
+	shl 	ebx, 2
+	mov 	ebx, dword[GraphicRoutines + ebx]
+	jmp 	ebx
+	
+GraphicRoutines:
+	dd Create_Window
+	dd Show_Window
+
+GUI_VARS    		   EQU  WINMNG+0C000h   ;Info GUI Address
+WINDOW_WIDTH_A     	   EQU  GUI_VARS+15
+WINDOW_HEIGHT_A    	   EQU  GUI_VARS+17
+WINDOW_POSITIONX_A 	   EQU  GUI_VARS+19
+WINDOW_POSITIONY_A 	   EQU  GUI_VARS+21
+WINDOW_BAR_COLOR_A 	   EQU  GUI_VARS+23
+WINDOW_BORDER_COLOR_A  EQU  GUI_VARS+27
+WINDOW_BACK_COLOR_A    EQU  GUI_VARS+31 
+WINDOW_TITLE_BUFFER_A  EQU  GUI_VARS+35  
+WINDOW_ICON_PATH_A     EQU  GUI_VARS+39  
+WINDOW_PROPERTY_A      EQU  GUI_VARS+43  
+WINDOW_ID_MASTER_A     EQU  GUI_VARS+45  
+WINDOW_ID_SLAVE_A      EQU  GUI_VARS+47
+
+Create_Window:
+	pop 	ebx
+	mov 	DWORD [WINDOW_TITLE_BUFFER_A], esi
+	mov 	DWORD [WINDOW_ICON_PATH_A], edi
+	mov 	WORD [WINDOW_PROPERTY_A], bx
+	push 	ecx
+	shr 	ecx, 16
+	mov 	WORD [WINDOW_WIDTH_A], cx
+	pop 	ecx
+	mov 	WORD [WINDOW_HEIGHT_A], cx
+	push 	edx
+	shr 	edx, 16
+	mov 	WORD [WINDOW_POSITIONX_A], dx
+	pop 	edx
+	mov 	WORD [WINDOW_POSITIONY_A], dx
+	
+	push 	ebp
+	mov 	ebp, esp
+	mov 	ebx, DWORD [ebp + (12 + 4)]   ; 12 + 4 = IDs
+	push 	ebx
+	shr 	ebx, 16
+	mov 	WORD [WINDOW_ID_MASTER_A], bx
+	pop 	ebx
+	mov 	WORD [WINDOW_ID_SLAVE_A], bx
+	mov 	edi, DWORD[ebp + (16 + 4)]    ; 16 + 4 = Colors
+	pop 	ebp
+	
+	mov 	eax, DWORD[edi]       
+	mov 	DWORD [WINDOW_BAR_COLOR_A], eax 
+	mov 	eax, DWORD[edi + 4]
+	mov 	DWORD [WINDOW_BORDER_COLOR_A], eax
+	mov 	eax, DWORD [edi + 8]
+	mov 	DWORD [WINDOW_BACK_COLOR_A], eax
+	call 	CODE_SEG32:PROGRAM_VRAM+5
+iretd
+
+Show_Window:
+	pop 	ebx
+	xor 	edx, edx
+	mov 	WORD [WINDOW_ID_SLAVE_A], bx
+	call 	CODE_SEG32:PROGRAM_VRAM+8
+iretd
+
+IRQ_Timer:
+	pushad
+	__WritePort 0x20, 0x20
+	__WritePort 0xA0, 0x20
+	popad
+iretd
+
+; ISR 0
+DE_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, DE_String
+	hlt
+	DE_String db "Fault: Divide Error (#DE Exception)"
+iretd
+
+; ISR 1
+DB_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	pushfd
+	or  dword[esp], 0x100
+	and dword[esp], 0xFFFEFFFF
+	popfd
+	mov esi, DB_String
+	hlt
+	jmp Debugging
+	DB_String db "Trap: Debug Exception (#DB Exception)"
+Debugging:
+	pop esi
+iretd
+
+; ISR 2
+NMI_Int: 
+iretd
+
+; ISR 3
+BP_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, BP_String
+	hlt
+	pushfd
+	or  dword[esp], 0x10000
+	popfd
+	jmp BackRun
+	BP_String db "Trap: Breakpoint - INT3 (#BP_Exception)"
+BackRun:
+	pop esi
+iretd
+
+; ISR 4
+OF_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, OF_String
+	hlt
+	jmp BackRun1
+	OF_String db "Trap: Overflow - INTO (#OF_Exception)"
+BackRun1:
+	pop esi
+iretd
+
+; ISR 5
+BR_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, BR_String
+	hlt
+	BR_String db "Fault: BOUND Range Exceeded (#BR_Exception)"
+iretd
+
+; ISR 6
+UD_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov 	esi, UD_String
+	hlt
+	UD_String db "Fault: Invalid Opcode - Undefined Opcode (#UD_Exception)"
+iretd
+	
+; ISR 7
+NM_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, NM_String
+	hlt
+	NM_String db "Fault: Device Not Available - No Math Coprocessor (#NM_Exception)"
+iretd
+
+; ISR 8
+DF_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, DF_String
+	hlt
+	jmp ReturnError1
+	DF_String db "Abort: Double Fault (#DF_Exception)"
+ReturnError1:
+	mov al, 0
+	stc
+	pop esi
+iretd
+
+; ISR 9
+CoProc_Segment_Overrun: 
+iretd
+
+; ISR 10
+TS_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, TS_String
+	hlt
+	jmp ReturnError2
+	TS_String db "Fault: Invalid TSS (#TS_Exception)"
+ReturnError2:
+	mov al, 10
+	stc
+	pop esi
+iretd
+
+; ISR 11
+NP_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, NP_String
+	hlt
+	jmp ReturnError3
+	NP_String db "Fault: Segment Not Present (#NP_Exception)"
+ReturnError3:
+	mov al, 11
+	stc
+	pop esi
+iretd
+
+; ISR 12
+SS_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, SS_String
+	hlt
+	jmp ReturnError4
+	SS_String db "Fault: Stack-Segment Fault (#SS_Exception)"
+ReturnError4:
+	mov al, 12
+	stc
+	pop esi
+iretd
+
+; ISR 13
+GP_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, GP_String
+	hlt
+	jmp ReturnError5
+	GP_String db "Fault: General Protection (#GP_Exception)"
+ReturnError5:
+	mov al, 13
+	stc
+	pop esi
+iretd
+
+; ISR 14
+PF_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, PF_String
+	hlt
+	jmp ReturnError6
+	PF_String db "Fault: Page Fault (#PF_Exception)"
+ReturnError6:
+	mov al, 14
+	stc
+	pop esi
+iretd
+
+; ISR 15
+Reserved_Intel: 
+iretd
+
+; ISR 16
+MF_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, MF_String
+	hlt
+	MF_String db "Fault: x87 FPU Floating-Point Error - Math Fault (#MF_Exception)"
+iretd
+
+; ISR 17
+AC_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, AC_String
+	hlt
+	jmp ReturnError7
+	AC_String db "Fault: Alignment Check (#AC_Exception)"
+ReturnError7:
+	mov al, 0
+	stc
+	pop esi
+iretd
+
+; ISR 18
+MC_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, MC_String
+	hlt
+	MC_String db "Abort: Machine Check (#MC_Exception)"
+iretd
+
+; ISR 19
+XM_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, XM_String
+	hlt
+	XM_String db "Fault: SIMD Floating-Point Exception (#XM_Exception)"
+iretd
+
+; ISR 20
+VE_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	mov esi, VE_String
+	hlt
+	VE_String db "Fault: Virtualization Exception (#VE_Exception)"
+iretd
+
+; ISR 21
+CP_Exception:
+	cmp 	eax, 0xFFFF
+	je 		Back8086Program
+	push esi
+	mov esi, CP_String
+	hlt
+	jmp ReturnError8
+	CP_String db "Fault: Control Protection Exception (#CP_Exception)"
+ReturnError8:
+	mov al, 21
+	pop esi
+iretd
+
+; ISR 22-31   -> Intel Reserved (Do not use)
+; ISR 32-255  -> User Defined Interrupts (Non-Reserved)
 
 PMSIZE_LONG equ ($-$$+3)>>2
