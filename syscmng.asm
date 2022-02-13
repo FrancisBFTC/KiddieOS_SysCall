@@ -296,11 +296,20 @@ LIB_String32:
 	jmp 	ebx
 	
 MonitorRoutines:
-	dd Print_String32
-	dd Print_Zero_Terminated
-	dd Get_String
-	dd Load_File
-	dd Get_Device
+	dd Print_String32           ; Função 0 (0x00)
+	dd Print_Zero_Terminated    ; Função 1 (0x01)
+	dd Get_String               ; Função 2 (0x02)
+	TIMES 7 dd 0                ; Função 3 a 9 (0x03 a 0x09) - Reservadas p/ rotinas de Strings
+	dd Load_File                ; Função 10 (0x0A)
+	TIMES 9 dd 0                ; Função 11 a 19 (0x0B a 0x13) - Reservadas p/ rotinas de Arquivos
+	dd Init_Device              ; Função 20 (0x14)
+	dd Close_Device             ; Função 21 (0x15)
+	dd Get_Class                ; Função 22 (0x16)
+	dd Get_SubClass             ; Função 23 (0x17)
+	dd Get_Interface            ; Função 24 (0x18)
+	dd Get_Device               ; Função 25 (0x19)
+	dd Get_Vendor               ; Função 26 (0x1A)
+	dd Get_Classes              ; Função 27 (0x1B)
 	
 	
 Print_String32:
@@ -339,6 +348,7 @@ CursorCol  db 0
 Print_Zero_Terminated:
 	pop 	ebx
 	pushad
+InitCoord:
 	push 	edx
 	xor 	cx, cx
 	xor 	eax, eax
@@ -353,6 +363,9 @@ Print_Zero_Terminated:
 	add 	edi, eax
 	pop 	edx
 Start_PZT:
+	mov 	al,byte [ds:esi]
+	cmp 	al, 0x0D
+	je 		LineBreak
     mov 	al,byte [ds:esi]
 	cmp 	al, 0
 	jz 		Exit_PZT
@@ -362,10 +375,17 @@ Start_PZT:
     mov 	byte [edi],al 
 	inc 	esi
 	inc 	edi
+	inc 	byte[CursorCol]
 	jmp 	Start_PZT
+LineBreak:
+	inc 	byte[CursorRaw]
+	mov 	byte[CursorCol], 12
+	inc 	esi
+	add 	edi, 2
+	jmp 	InitCoord
 Exit_PZT:
 	popad
-	inc 	byte[CursorRaw]
+	;inc 	byte[CursorRaw]
 iretd
 
 Get_String:
@@ -506,17 +526,112 @@ Run8086Program:
     push 	Ini_Mode8086
 iret
 	
-Get_Device:
+PCI_ADDR 	EQU  0x150000
+Init_Device:
 	pop 	ebx
-	push 	ecx
-	mov 	edi,0x150000       ; EDI = Endereço linear para onde o programa sera copiado
+	pushad
+	mov 	edi, PCI_ADDR       ; EDI = Endereço linear para onde o programa sera copiado
     mov 	esi, (PCI+0xC000)    ; ESI = Endereço Linear do programa (0x0900:0)
     mov 	ecx, (PCI_NUM_SECTORS*512)               ; ECX = numero de DWORDs para copiar
     rep 	movsb	   	           ; Copiar todas as ECX dwords de ESI para EDI
-	pop 	ecx
+	popad
+iretd
+
+Close_Device:
+	pop 	ebx
+	pushad
+	xor 	eax, eax
+	mov 	edi, PCI_ADDR   
+    mov 	ecx, ((PCI_NUM_SECTORS*512) / 4)
+    rep 	stosd
+	popad
+iretd
+
+Get_Class:
+	pop 	ebx
+	push 	eax
+	push 	ebx
+	push 	ecx
+	
 	mov 	al, bh
-    call 	0x150000+5
-iret
+    call 	PCI_ADDR+(5*1)
+	
+	pop 	ecx
+	pop 	ebx
+	pop 	eax
+iretd
+
+Get_SubClass:
+	pop 	ebx
+	push 	eax
+	push 	ebx
+	push 	ecx
+	
+	mov 	al, bh
+    call 	PCI_ADDR+(5*2)
+	
+	pop 	ecx
+	pop 	ebx
+	pop 	eax
+iretd
+
+Get_Interface:
+	pop 	ebx
+	push 	eax
+	push 	ebx
+	push 	ecx
+	
+	mov 	al, bh
+    call 	PCI_ADDR+(5*3)
+	
+	pop 	ecx
+	pop 	ebx
+	pop 	eax
+iretd
+
+Get_Device:
+	pop 	ebx
+	push 	eax
+	push 	ebx
+	push 	ecx
+	
+	mov 	al, bh
+    call 	PCI_ADDR+(5*4)
+	
+	pop 	ecx
+	pop 	ebx
+	pop 	eax
+iretd
+
+Get_Vendor:
+	pop 	ebx
+	push 	eax
+	push 	ebx
+	push 	ecx
+	
+	mov 	al, bh
+    call 	PCI_ADDR+(5*5)
+	
+	pop 	ecx
+	pop 	ebx
+	pop 	eax
+iretd
+
+Get_Classes:
+	pop 	ebx
+	push 	ebx
+	push 	ecx
+	
+	mov 	al, bh
+    call 	PCI_ADDR+(5*6)
+	
+	pop 	ecx
+	pop 	ebx
+iretd
+
+;----------------------------------------------------
+; TODO criar mais ISRs aqui de Dispositivos
+;----------------------------------------------------
 
 LIB_Graphic32:
 	push 	ebx
