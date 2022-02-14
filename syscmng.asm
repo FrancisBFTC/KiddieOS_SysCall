@@ -311,6 +311,9 @@ MonitorRoutines:
 	dd Get_Vendor               ; Função 26 (0x1A)
 	dd Get_Classes              ; Função 27 (0x1B)
 	
+	; TODO alterar o lugar de Get_Hexa_Value32 p/ funções de Strings
+	dd Get_Hexa_Value32         ; Função 28 (0x1C)
+	
 	
 Print_String32:
 	pop 	ebx
@@ -409,6 +412,31 @@ Get_S:
 	popad
 iretd
 
+Get_Hexa_Value32:
+	pop 	ebx
+	pushad
+	mov 	esi, ebx
+	mov 	edx, 0xF0000000
+	mov 	cl, 28
+Print_Hexa32:
+	xor 	ebx, ebx
+	mov 	ebx, esi
+	and 	ebx, edx
+	shr 	ebx, cl
+	push 	esi
+	mov 	esi, VetorHexa
+	mov 	al, byte[esi + ebx]
+	stosb
+	pop 	esi
+	cmp 	cl, 0
+	jz 		RetHexa32
+	sub 	cl, 4
+	shr 	edx, 4 
+	jmp 	Print_Hexa32
+	RetHexa32:
+	popad
+iretd
+VetorHexa db "0123456789ABCDEF",0
 
 LoadFile               EQU (FAT16+9)
 LoadRest               EQU (FAT16+12)
@@ -535,7 +563,7 @@ Init_Device:
     mov 	ecx, (PCI_NUM_SECTORS*512)               ; ECX = numero de DWORDs para copiar
     rep 	movsb	   	           ; Copiar todas as ECX dwords de ESI para EDI
 	popad
-iretd
+iret
 
 Close_Device:
 	pop 	ebx
@@ -545,7 +573,7 @@ Close_Device:
     mov 	ecx, ((PCI_NUM_SECTORS*512) / 4)
     rep 	stosd
 	popad
-iretd
+iret
 
 Get_Class:
 	pop 	ebx
@@ -559,7 +587,7 @@ Get_Class:
 	pop 	ecx
 	pop 	ebx
 	pop 	eax
-iretd
+iret
 
 Get_SubClass:
 	pop 	ebx
@@ -573,7 +601,7 @@ Get_SubClass:
 	pop 	ecx
 	pop 	ebx
 	pop 	eax
-iretd
+iret
 
 Get_Interface:
 	pop 	ebx
@@ -587,7 +615,7 @@ Get_Interface:
 	pop 	ecx
 	pop 	ebx
 	pop 	eax
-iretd
+iret
 
 Get_Device:
 	pop 	ebx
@@ -601,7 +629,7 @@ Get_Device:
 	pop 	ecx
 	pop 	ebx
 	pop 	eax
-iretd
+iret
 
 Get_Vendor:
 	pop 	ebx
@@ -615,7 +643,7 @@ Get_Vendor:
 	pop 	ecx
 	pop 	ebx
 	pop 	eax
-iretd
+iret
 
 Get_Classes:
 	pop 	ebx
@@ -627,7 +655,8 @@ Get_Classes:
 	
 	pop 	ecx
 	pop 	ebx
-iretd
+iret
+
 
 ;----------------------------------------------------
 ; TODO criar mais ISRs aqui de Dispositivos
@@ -861,19 +890,39 @@ iretd
 
 ; ISR 13
 GP_Exception:
-	cmp 	eax, 0xFFFF
-	je 		Back8086Program
-	push esi
-	mov esi, GP_String
-	hlt
+	popad
+	mov 	eax, 0x1C
+	mov 	ebx, esi
+	mov 	edi, BufferHex
+	int 	0xCE
+	mov 	esi, AppError1
+	mov 	eax, 0x01
+	mov 	edx, 0x74
+	int 	0xCE
+	mov 	eax, 0x01
+	mov 	esi, BufferHex
+	mov 	edx, 0x74
+	int 	0xCE
+	mov 	eax, 0x01
+	mov 	esi, FnWn
+	mov 	edx, 0x74
+	int 	0xCE
 	jmp ReturnError5
-	GP_String db "Fault: General Protection (#GP_Exception)"
 ReturnError5:
-	mov al, 13
-	stc
-	pop esi
-iretd
-
+	mov 	ax, 13
+	jmp 	$
+ret
+AppError1:
+	 db 0x0D, "---------------------------------------------------"
+	 db 0x0D, "|                APPLICATION ERROR                |"
+ 	 db 0x0D, "|                                                 |"
+	 db 0x0D, "|    Fault: General Protection (#GP_Exception)    |"
+	 db 0x0D, "|               at address 0x",0
+FnWn db       "             |"	
+	 db 0x0D, "|_________________________________________________|"
+	 db 0
+	BufferHex: db "00000000",0
+	
 ; ISR 14
 PF_Exception:
 	cmp 	eax, 0xFFFF
