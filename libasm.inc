@@ -1,8 +1,10 @@
 ADDRESS EQU 0x112000
 
-ORG   0
+ORG   0x9000
 ALIGN 4
+Code32Bit:
 BITS 32
+
 SECTION protectedmode vstart=ADDRESS, valign=4
 %DEFINE EQ ,
 %DEFINE Prints(ARG1, ARG2, ARG3)  Write ARG1, ARG2, ARG3
@@ -107,3 +109,66 @@ LIB:
 	int 	0xCE
 	popad
 retf	
+
+;
+; Return a Device Class Number
+; unsigned short Get_Class_Device(uint16_t bus, uint16_t dev, uint16_t func)
+; bus  = 8
+; dev  = 10
+; func = 12
+; ebp
+Get_Class_Device:
+    push 	ebp
+    mov 	ebp,esp
+
+    mov 	eax,0x1B
+    mov 	bx, word [ebp + 8]
+	shl 	bx, 8
+    or  	bx, word [ebp + 10]
+    mov 	cx, word [ebp + 12]
+    int 	0xCE
+
+    pop ebp
+    ret
+	
+;
+; Return a Class Name Device
+; char* Get_Class_Name(uint16_t bus, uint16_t dev, uint16_t func)
+; bus  = 8
+; dev  = 10
+; func = 12
+; ebp
+Get_Class_Name:
+    push 	ebp
+    mov 	ebp,esp
+
+    mov 	eax,0x16
+    mov 	bx, word [ebp + 8]
+	shl 	bx, 8
+    or  	bx, word [ebp + 10]
+    mov 	cx, word [ebp + 12]
+    int 	0xCE
+
+    pop ebp
+    ret
+	
+;
+; Return a SubClass Name Device
+; char* Get_SubClass_Name(uint16_t bus, uint16_t dev, uint16_t func)
+; bus  = 8
+; dev  = 10
+; func = 12
+; ebp
+Get_SubClass_Name:
+    push 	ebp
+    mov 	ebp,esp
+
+    mov 	eax,0x17
+    mov 	bx, word [ebp + 8]
+	shl 	bx, 8
+    or  	bx, word [ebp + 10]
+    mov 	cx, word [ebp + 12]
+    int 	0xCE
+
+    pop ebp
+    ret
