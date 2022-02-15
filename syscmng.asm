@@ -269,6 +269,7 @@ NoLoadTSSAgain:
 	
 	mov 	WORD [Return_Value], ax
 	
+	mov 	byte[CursorCol], 12
 	mov 	dh, byte[CursorRaw]
 	mov 	dl, byte[CursorCol]
 	mov 	si, dx
@@ -313,7 +314,7 @@ MonitorRoutines:
 	
 	; TODO alterar o lugar de Get_Hexa_Value32 p/ funções de Strings
 	dd Get_Hexa_Value32         ; Função 28 (0x1C)
-	
+	dd Get_Hexa_Value16         ; Função 29 (0x1D)
 	
 Print_String32:
 	pop 	ebx
@@ -437,6 +438,31 @@ Print_Hexa32:
 	popad
 iretd
 VetorHexa db "0123456789ABCDEF",0
+
+Get_Hexa_Value16:
+	pop 	ebx
+	pushad
+	mov 	SI, BX
+	mov	 	DX, 0xF000
+	mov 	CL, 12
+Print_Hexa16:
+	xor 	BX, BX
+	mov 	BX, SI
+	and 	BX, DX
+	shr 	BX, CL
+	push 	SI
+	mov 	esi, VetorHexa
+	mov 	al, byte[esi + ebx]
+	stosb
+	pop 	SI
+	cmp 	CL, 0
+	jz 		RetHexa
+	sub 	CL, 4
+	shr 	DX, 4
+	jmp 	Print_Hexa16
+RetHexa:
+	popad
+iretd
 
 LoadFile               EQU (FAT16+9)
 LoadRest               EQU (FAT16+12)
@@ -738,6 +764,21 @@ IRQ_Timer:
 	popad
 iretd
 
+IRQ_Keyboard:
+	pushad
+	__ReadPort 0x60
+	mov 	edi, BufferKey
+	mov 	byte[edi], al
+	mov 	eax, 0x01
+	mov 	esi, edi
+	mov 	edx, 0x74
+	int 	0xCE
+	__WritePort 0x20, 0x20
+	__WritePort 0xA0, 0x20
+	popad
+iretd
+BufferKey db 0,0
+
 ; ISR 0
 DE_Exception:
 	cmp 	eax, 0xFFFF
@@ -911,7 +952,7 @@ GP_Exception:
 ReturnError5:
 	mov 	ax, 13
 	jmp 	$
-ret
+retf
 AppError1:
 	 db 0x0D, "---------------------------------------------------"
 	 db 0x0D, "|                APPLICATION ERROR                |"
