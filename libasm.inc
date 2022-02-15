@@ -7,7 +7,6 @@ BITS 32
 
 SECTION protectedmode vstart=ADDRESS, valign=4
 %DEFINE EQ ,
-%DEFINE Prints(ARG1, ARG2, ARG3)  Write ARG1, ARG2, ARG3
 %DEFINE Main(ARG1, ARG2) .Main ARG1, ARG2
 %DEFINE _ENTRY(FUNC) (FUNC - SIZE_PROG)
 
@@ -40,7 +39,6 @@ START_PROG:
 	END_PROG:
 		nop
 %ENDMACRO
-
 ; ============================================
 
 ; ============================================
@@ -72,10 +70,15 @@ START_PROG:
 %ENDMACRO
 ; ============================================
 
-; ============================================
+; =====================================================================
 ; Macro Functions Library
 
-%MACRO Write 3
+%DEFINE Prints(ARG1, ARG2, ARG3)  STR.Write ARG1, ARG2, ARG3
+%DEFINE Printz(ARG1, ARG2)        STR.Write_Till_Zero ARG1, ARG2
+%DEFINE Get_Hexa16(ARG1, ARG2)    STR.Get_Hexa_16 ARG1, ARG2
+%DEFINE Get_Hexa32(ARG1, ARG2)    STR.Get_Hexa_32 ARG1, ARG2
+
+%MACRO STR.Write 3
 	jmp 	0x08:%%String
 	%IF %1 == 's'
 		%%Data: db %3
@@ -97,27 +100,146 @@ START_PROG:
 			mov 	ecx, 1
 	%ENDIF
 		mov 	dl, %2
-		call 	0x08:LIB.SYS__WRITE
+		call 	__SYS_WRITE
 %ENDMACRO
 
-; ============================================
+%MACRO STR.Write_Till_Zero 2
+	push 	DWORD %2
+	push    DWORD %1
+	call 	__SYS_WRITE_TILL_ZERO
+	STR.Restore_Args1
+%ENDMACRO
 
-LIB:
-.SYS__WRITE:
+%MACRO STR.Restore_Args1 0
+	pop 	edx
+	pop     esi
+%ENDMACRO
+
+%MACRO STR.Get_Hexa_16 2
+	push 	DWORD %2
+	push 	WORD  %1
+	call 	__SYS_GET_HEXA_16	
+%ENDMACRO
+
+%MACRO STR.Get_Hexa_32 2
+	push 	DWORD %2
+	push 	DWORD %1
+	call 	__SYS_GET_HEXA_32
+%ENDMACRO
+
+; Print X Bytes on Screen
+; void SYS_WRITE(char *String)
+__SYS_WRITE:
 	pushad
-	mov 	eax, 0
+	mov 	eax, 0x00
 	int 	0xCE
 	popad
-retf	
+ret
 
-;
+; Print a String on Screen zero-terminated
+; void SYS_WRITE_TILL_ZERO(int color, char* String)
+; color  = 8
+; String = 12
+; ebp
+__SYS_WRITE_TILL_ZERO:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x01
+	mov 	edx, DWORD [ebp + 8]
+	mov 	esi, DWORD [ebp + 12]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+; Fill a buffer with a 16-bit hexadecimal value
+; void SYS_GET_HEXA_16(uint16_t number, char* String)
+; number  = 8
+; String  = 12
+; ebp
+__SYS_GET_HEXA_16:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x1D
+	mov 	bx, WORD [ebp + 8]
+	mov 	edi, DWORD [ebp + 10]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+; Fill a buffer with a 32-bit hexadecimal value
+; void SYS_GET_HEXA_32(int number, char* String)
+; number  = 8
+; String  = 12
+; ebp
+__SYS_GET_HEXA_32:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x1C
+	mov 	ebx, DWORD [ebp + 8]
+	mov 	edi, DWORD [ebp + 12]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+
+; =====================================================================
+
+
+; =====================================================================
+; PCI Macros & Functions
+
+%DEFINE Get_Class_Number(X, Y, Z)  PCI.Get_Device_Number X, Y, Z
+%DEFINE Get_Class_Name(X, Y, Z)    PCI.Get_Class_Name X, Y, Z
+%DEFINE Get_SubClass_Name(X, Y, Z) PCI.Get_SubClass_Name X, Y, Z
+%DEFINE Restore_Args(X, Y, Z)      PCI.Restore_Args X, Y, Z
+
+
+%MACRO PCI.Get_Device_Number 3
+	push 	WORD %3
+	push    WORD %2
+	push  	WORD %1
+	call 	__Get_Class_Device
+%ENDMACRO
+
+%MACRO PCI.Get_Class_Name 3
+	push 	WORD %3
+	push    WORD %2
+	push  	WORD %1
+	call 	__Get_Class_Name
+%ENDMACRO
+
+%MACRO PCI.Get_SubClass_Name 3
+	push 	WORD %3
+	push    WORD %2
+	push  	WORD %1
+	call 	__Get_SubClass_Name
+%ENDMACRO
+
+%MACRO PCI.Restore_Args 3
+	pop 	WORD %1
+	pop     WORD %2
+	pop  	WORD %3
+%ENDMACRO
+
+%MACRO PCI.Restore_Args1 3
+	pop 	ax
+	pop     bx
+	pop  	dx
+%ENDMACRO
+
 ; Return a Device Class Number
 ; unsigned short Get_Class_Device(uint16_t bus, uint16_t dev, uint16_t func)
 ; bus  = 8
 ; dev  = 10
 ; func = 12
 ; ebp
-Get_Class_Device:
+__Get_Class_Device:
     push 	ebp
     mov 	ebp,esp
 
@@ -138,7 +260,7 @@ Get_Class_Device:
 ; dev  = 10
 ; func = 12
 ; ebp
-Get_Class_Name:
+__Get_Class_Name:
     push 	ebp
     mov 	ebp,esp
 
@@ -159,7 +281,7 @@ Get_Class_Name:
 ; dev  = 10
 ; func = 12
 ; ebp
-Get_SubClass_Name:
+__Get_SubClass_Name:
     push 	ebp
     mov 	ebp,esp
 
@@ -172,3 +294,4 @@ Get_SubClass_Name:
 
     pop ebp
     ret
+; =====================================================================
