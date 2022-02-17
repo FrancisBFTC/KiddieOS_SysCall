@@ -8,7 +8,7 @@
 
 Main(ARGC, ARGV)
 
-	cli		; Disable Interrupts
+	cli      ; Disable Interrupts
 	
 	; Load PCI Driver and Initialize Device
 	mov 	eax, 0x14   ; Syscall Init_Device
@@ -28,5 +28,5 @@ Main(ARGC, ARGV)
 	mov 	eax, 0x15   ; Syscall Close_Device
 	int 	0xCE        ; Invoke the Syscall
 	
-	sti 	; Enable Interrupts
+	sti      ; Enable Interrupts
 .EndMain
