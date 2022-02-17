@@ -312,9 +312,12 @@ MonitorRoutines:
 	dd Get_Vendor               ; Função 26 (0x1A)
 	dd Get_Classes              ; Função 27 (0x1B)
 	
-	; TODO alterar o lugar de Get_Hexa_Value32 p/ funções de Strings
+	; TODO alterar o lugar das ISRs abaixo p/ rotinas de Strings
 	dd Get_Hexa_Value32         ; Função 28 (0x1C)
 	dd Get_Hexa_Value16         ; Função 29 (0x1D)
+	dd Get_Dec_Value32          ; Função 30 (0x1E)
+	dd Malloc		            ; Função 31 (0x1F)
+	dd Free 		            ; Função 32 (0x20)
 	
 Print_String32:
 	pop 	ebx
@@ -463,6 +466,136 @@ Print_Hexa16:
 RetHexa:
 	popad
 iretd
+
+
+Get_Dec_Value32:
+	pop 	ebx
+	pushad
+	mov 	esi, VetorDec
+	mov 	eax, ebx
+	cmp 	eax, 0
+	je 		ZeroAndExit
+	xor 	edx, edx
+	mov 	ebx, 10
+	mov 	ecx, 1000000000
+DividePerECX:
+	cmp 	eax, ecx
+	jb 		VerifyZero
+	mov 	byte[Zero], 1
+	push 	eax
+	div 	ecx
+	xor 	edx, edx
+	push 	eax
+	push 	ebx
+	mov 	ebx, eax
+	mov 	al, byte[esi + ebx]
+	stosb
+	pop 	ebx
+	pop 	eax
+	mul 	ecx
+	mov 	edx, eax
+	pop 	eax
+	sub 	eax, edx
+	xor 	edx, edx
+DividePer10:
+	cmp 	ecx, 1
+	je 		Ret_Dec32
+	push 	eax
+	mov 	eax, ecx
+	div 	ebx
+	mov 	ecx, eax
+	pop 	eax
+	jmp 	DividePerECX
+VerifyZero:
+	cmp 	byte[Zero], 0
+	je 		ContDividing
+	push 	eax
+	mov 	al, '0'
+	stosb
+	pop 	eax
+ContDividing:
+	jmp 	DividePer10
+ZeroAndExit:
+	mov 	al, '0'
+	stosb
+Ret_Dec32:
+	mov 	byte[Zero], 0
+	popad
+iretd
+Zero db 0
+VetorDec db "0123456789",0
+
+
+; ==============================================================
+; Rotina que aloca uma quantidade de bytes e retorna endereço
+; IN: ECX = Tamanho de Posições (Size)
+;     EBX = Tamanho do Inteiro (SizeOf(int))
+
+; OUT: EAX = Endereço Alocado
+; ==============================================================
+Malloc:
+	pop 	ebx
+	pushad
+	
+	mov  	edi, DWORD[PROGRAM_BUFFER+13]
+	push 	edi
+	
+	cmp 	ebx, 1
+	je 		Alloc_Size8
+	cmp 	ebx, 2
+	je 		Alloc_Size16
+	cmp 	ebx, 4
+	je 		Alloc_Size32
+	jmp 	Return_Call
+	
+	Alloc_Size8:  
+		mov 	dword[Size_Busy], ecx
+		rep 	stosb
+		jmp 	Return_Call
+	Alloc_Size16: 
+		mov 	dword[Size_Busy], ecx
+		shl 	dword[Size_Busy], 1
+		rep 	stosw
+		jmp 	Return_Call
+	Alloc_Size32: 
+		mov 	dword[Size_Busy], ecx
+		shl 	dword[Size_Busy], 2
+		rep 	stosd
+		jmp 	Return_Call
+	
+Return_Call:
+	pop 	DWORD[Return_Var_Calloc]
+	popad
+	mov 	eax, DWORD[Return_Var_Calloc]
+	mov 	byte[Memory_Busy], 1
+iretd
+
+Return_Var_Calloc dd 0
+Size_Busy 	dd 0
+Memory_Busy db 0
+
+; ==============================================================
+; Libera espaço dado um endereço alocado
+; IN: EBX = Ponteiro de Endereço Alocado
+;
+; OUT: Nenhum.
+; ==============================================================
+Free:
+	pop 	ebx
+	pushad
+	mov 	edi, dword[ebx]
+	mov 	dword[ebx], 0x00000000
+	
+	mov 	eax, 0
+	mov 	ecx, dword[Size_Busy]
+	rep 	stosb
+	
+	mov 	dword[Size_Busy], 0
+	mov 	dword[Return_Var_Calloc], 0
+	mov 	dword[Memory_Busy], 0
+	popad
+iretd
+
 
 LoadFile               EQU (FAT16+9)
 LoadRest               EQU (FAT16+12)
@@ -849,12 +982,35 @@ iretd
 
 ; ISR 6
 UD_Exception:
-	cmp 	eax, 0xFFFF
-	je 		Back8086Program
+	popad
+	mov 	eax, 0x1C
+	mov 	ebx, esi
+	mov 	edi, BufferHex
+	int 	0xCE
 	mov 	esi, UD_String
-	hlt
-	UD_String db "Fault: Invalid Opcode - Undefined Opcode (#UD_Exception)"
+	mov 	eax, 0x01
+	mov 	edx, 0x74
+	int 	0xCE
+	mov 	eax, 0x01
+	mov 	esi, BufferHex
+	mov 	edx, 0x74
+	int 	0xCE
+	mov 	eax, 0x01
+	mov 	esi, SSW
+	mov 	edx, 0x74
+	int 	0xCE
+	mov 	ax, 0x06
+	jmp 	$
 iretd
+UD_String:
+	 db 0x0D, "---------------------------------------------------"
+	 db 0x0D, "|                APPLICATION ERROR                |"
+ 	 db 0x0D, "|                                                 |"
+	 db 0x0D, "|    Fault: Invalid Opcode - Undefined Opcode     |"
+	 db 0x0D, "|      (#UD_Exception) at address 0x",0
+SSW  db       "      |"	
+	 db 0x0D, "|_________________________________________________|"
+	 db 0
 	
 ; ISR 7
 NM_Exception:
@@ -936,7 +1092,7 @@ GP_Exception:
 	mov 	ebx, esi
 	mov 	edi, BufferHex
 	int 	0xCE
-	mov 	esi, AppError1
+	mov 	esi, GP_String
 	mov 	eax, 0x01
 	mov 	edx, 0x74
 	int 	0xCE
@@ -945,21 +1101,19 @@ GP_Exception:
 	mov 	edx, 0x74
 	int 	0xCE
 	mov 	eax, 0x01
-	mov 	esi, FnWn
+	mov 	esi, GPW
 	mov 	edx, 0x74
 	int 	0xCE
-	jmp ReturnError5
-ReturnError5:
 	mov 	ax, 13
 	jmp 	$
 retf
-AppError1:
+GP_String:
 	 db 0x0D, "---------------------------------------------------"
 	 db 0x0D, "|                APPLICATION ERROR                |"
  	 db 0x0D, "|                                                 |"
 	 db 0x0D, "|    Fault: General Protection (#GP_Exception)    |"
 	 db 0x0D, "|               at address 0x",0
-FnWn db       "             |"	
+GPW  db       "             |"	
 	 db 0x0D, "|_________________________________________________|"
 	 db 0
 	BufferHex: db "00000000",0
