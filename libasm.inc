@@ -77,6 +77,7 @@ START_PROG:
 %DEFINE Printz(ARG1, ARG2)        STR.Write_Till_Zero ARG1, ARG2
 %DEFINE Get_Hexa16(ARG1, ARG2)    STR.Get_Hexa_16 ARG1, ARG2
 %DEFINE Get_Hexa32(ARG1, ARG2)    STR.Get_Hexa_32 ARG1, ARG2
+%DEFINE Get_Dec32(ARG1, ARG2)     STR.Get_Dec_32 ARG1, ARG2
 
 %MACRO STR.Write 3
 	jmp 	0x08:%%String
@@ -125,6 +126,12 @@ START_PROG:
 	push 	DWORD %2
 	push 	DWORD %1
 	call 	__SYS_GET_HEXA_32
+%ENDMACRO
+
+%MACRO STR.Get_Dec_32 2
+	push 	DWORD %2
+	push 	DWORD %1
+	call 	__SYS_GET_DEC_32
 %ENDMACRO
 
 ; Print X Bytes on Screen
@@ -180,6 +187,24 @@ __SYS_GET_HEXA_32:
     mov 	ebp,esp
 	
 	mov 	eax, 0x1C
+	mov 	ebx, DWORD [ebp + 8]
+	mov 	edi, DWORD [ebp + 12]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+
+; Fill a buffer with a 32-bit decimal value
+; void SYS_GET_DEC_32(int number, char* String)
+; number  = 8
+; String  = 12
+; ebp
+__SYS_GET_DEC_32:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x1E
 	mov 	ebx, DWORD [ebp + 8]
 	mov 	edi, DWORD [ebp + 12]
 	int 	0xCE
