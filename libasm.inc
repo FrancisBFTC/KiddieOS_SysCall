@@ -18,6 +18,7 @@ START_PROG:
 	ENTRY:      dd _ENTRY(_MAIN)
 	SIZE_PROG: 	dd (END_PROG - START_PROG)
 	ADDR_PROG:	dd ADDRESS
+	DATA_PROG:  dd (END_PROG+0x20)
 ; ---------------------------------------------------------
 
 
@@ -26,7 +27,7 @@ START_PROG:
 
 %MACRO .Main 2
 	%1 db 0
-	%2 db (_END + 3)
+	%2 db END_PROG
 	_MAIN:
 		pushad	
 %ENDMACRO 
@@ -78,6 +79,8 @@ START_PROG:
 %DEFINE Get_Hexa16(ARG1, ARG2)    STR.Get_Hexa_16 ARG1, ARG2
 %DEFINE Get_Hexa32(ARG1, ARG2)    STR.Get_Hexa_32 ARG1, ARG2
 %DEFINE Get_Dec32(ARG1, ARG2)     STR.Get_Dec_32 ARG1, ARG2
+%DEFINE Malloc(ARG1, ARG2)        VEC.Malloc_Func ARG1, ARG2
+%DEFINE Free(ARG1)                VEC.Free_Func ARG1
 
 %MACRO STR.Write 3
 	jmp 	0x08:%%String
@@ -132,6 +135,17 @@ START_PROG:
 	push 	DWORD %2
 	push 	DWORD %1
 	call 	__SYS_GET_DEC_32
+%ENDMACRO
+
+%MACRO VEC.Malloc_Func 2
+	push 	DWORD %2
+	push 	DWORD %1
+	call 	__SYS_MALLOC_FUNC
+%ENDMACRO
+
+%MACRO VEC.Free_Func 1
+	push 	DWORD %1
+	call 	__SYS_FREE_FUNC
 %ENDMACRO
 
 ; Print X Bytes on Screen
@@ -207,6 +221,38 @@ __SYS_GET_DEC_32:
 	mov 	eax, 0x1E
 	mov 	ebx, DWORD [ebp + 8]
 	mov 	edi, DWORD [ebp + 12]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+; Allocation of Memory Buffer
+; void* SYS_MALLOC_FUNC(int size, int sizeof)
+; size  = 8 (ECX)
+; sizeof  = 12 (EBX)
+; ebp
+__SYS_MALLOC_FUNC:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x1F
+	mov 	ecx, DWORD [ebp + 8]
+	mov 	ebx, DWORD [ebp + 12]
+	int 	0xCE
+	
+	pop ebp
+ret
+
+; Unallocation of buffer
+; void SYS_FREE_FUNC(int *addr)
+; addr  = 8
+; ebp
+__SYS_FREE_FUNC:
+	push 	ebp
+    mov 	ebp,esp
+	
+	mov 	eax, 0x20
+	mov 	ebx, DWORD [ebp + 8]
 	int 	0xCE
 	
 	pop ebp
