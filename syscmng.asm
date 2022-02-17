@@ -372,14 +372,14 @@ InitCoord:
 Start_PZT:
 	mov 	al,byte [ds:esi]
 	cmp 	al, 0x0D
-	je 		LineBreak
-    mov 	al,byte [ds:esi]
+	je      LineBreak
+    mov     al,byte [ds:esi]
 	cmp 	al, 0
 	jz 		Exit_PZT
-    mov 	byte [edi],al 
-    inc 	edi 
-    mov 	al, dl
-    mov 	byte [edi],al 
+    mov     byte [edi],al 
+    inc     edi 
+    mov     al, dl
+    mov     byte [edi],al 
 	inc 	esi
 	inc 	edi
 	inc 	byte[CursorCol]
@@ -411,9 +411,9 @@ Get_String:
 	add 	esi, eax
 Get_S:
     movsb       
-	inc 	esi
-	loop 	Get_S
-	popad
+    inc 	esi
+    loop 	Get_S
+    popad
 iretd
 
 Get_Hexa_Value32:
@@ -433,7 +433,7 @@ Print_Hexa32:
 	stosb
 	pop 	esi
 	cmp 	cl, 0
-	jz 		RetHexa32
+	jz      RetHexa32
 	sub 	cl, 4
 	shr 	edx, 4 
 	jmp 	Print_Hexa32
@@ -446,7 +446,7 @@ Get_Hexa_Value16:
 	pop 	ebx
 	pushad
 	mov 	SI, BX
-	mov	 	DX, 0xF000
+	mov     DX, 0xF000
 	mov 	CL, 12
 Print_Hexa16:
 	xor 	BX, BX
@@ -459,7 +459,7 @@ Print_Hexa16:
 	stosb
 	pop 	SI
 	cmp 	CL, 0
-	jz 		RetHexa
+	jz      RetHexa
 	sub 	CL, 4
 	shr 	DX, 4
 	jmp 	Print_Hexa16
@@ -474,13 +474,13 @@ Get_Dec_Value32:
 	mov 	esi, VetorDec
 	mov 	eax, ebx
 	cmp 	eax, 0
-	je 		ZeroAndExit
+	je      ZeroAndExit
 	xor 	edx, edx
 	mov 	ebx, 10
 	mov 	ecx, 1000000000
 DividePerECX:
 	cmp 	eax, ecx
-	jb 		VerifyZero
+	jb      VerifyZero
 	mov 	byte[Zero], 1
 	push 	eax
 	div 	ecx
@@ -499,7 +499,7 @@ DividePerECX:
 	xor 	edx, edx
 DividePer10:
 	cmp 	ecx, 1
-	je 		Ret_Dec32
+	je      Ret_Dec32
 	push 	eax
 	mov 	eax, ecx
 	div 	ebx
@@ -508,7 +508,7 @@ DividePer10:
 	jmp 	DividePerECX
 VerifyZero:
 	cmp 	byte[Zero], 0
-	je 		ContDividing
+	je      ContDividing
 	push 	eax
 	mov 	al, '0'
 	stosb
@@ -571,8 +571,8 @@ Return_Call:
 iretd
 
 Return_Var_Calloc dd 0
-Size_Busy 	dd 0
-Memory_Busy db 0
+Size_Busy         dd 0
+Memory_Busy       db 0
 
 ; ==============================================================
 ; Libera espaço dado um endereço alocado
