@@ -1,17 +1,38 @@
 %INCLUDE "libasm.inc"
 
-INT8  Number EQ 0x41
-CHAR  Value  EQ "X"
+Vector  dd 20, 30, 40, 50	
+StrConv times 10 db 0
+i 	    dd 0
+Spaces  db " ",0
 
 Main(ARGC, ARGV)
+
+	; ------------------------------------------------------
+	; First Example
+	mov 	eax, 0x14
+	int 	0xCE
 	
-	; Prints (Arg1, Arg2, Arg3) ->
-	; Arg1: Type
-	; Arg2: Color Back/Fore
-	; Arg3: Content Value
+	Get_SubClass_Name(0, 13, 0)
+	STRING MyDevice EQ RETURN(0)
+	Printz(0x07, [MyDevice])
 	
-	Prints ('s', 0x4F, "My own program running!")
-	Prints ('s', 0x2F, "Variable Value = ")
-	Prints ('c', 0x1F, Value)
+	mov 	eax, 0x15
+	int 	0xCE
+	; ------------------------------------------------------
 	
+	; ------------------------------------------------------
+	; Second Example
+	mov 	ecx, 4
+Show_Vector:
+	push 	ecx
+	VINT32 	Var EQ Vector,[i]
+	INT.ToString([Var], StrConv)        ; Convert INTEGER Value to TEXT
+	STR.Restore_Args1                   ; POP arguments
+	Printz	(0x02, StrConv)             ; Print converted value on Screen
+	Printz	(0x00, Spaces)              ; Print Space
+	inc 	dword[i]
+	pop 	ecx
+	loop 	Show_Vector
+	; ------------------------------------------------------
+
 .EndMain
