@@ -45,6 +45,7 @@ START_PROG:
 ; ============================================
 ; Primitive Types
 
+ 
 %MACRO INT8 2
 	%1 db %2,0
 %ENDMACRO
@@ -69,6 +70,39 @@ START_PROG:
 	%1: db %2,0
 	%1.Length dw ($ - %1)
 %ENDMACRO
+
+%MACRO STRING 3
+	Restore_Args(ax, ax, ax)
+	push 	esi
+	add 	%2, %3
+	mov 	DWORD[%1], %2
+	jmp 	%%skipaddr
+	%1 dd 0x00000000
+	%%skipaddr:
+	pop 	esi
+%ENDMACRO
+
+%MACRO UINT32 3
+	;Restore_Args(ax, ax, ax)
+	push 	esi
+	mov 	ebx, %3
+	shl 	ebx, 2
+	add 	%2, ebx
+	mov 	DWORD[%1], %2
+	jmp 	%%skipaddr
+	%1 dd 0x00000000
+	%%skipaddr:
+	pop 	esi
+%ENDMACRO
+
+%MACRO VINT32 3
+	mov 	esi, %2        ; Endereço de Vector para ESI
+	UINT32 %1 EQ RETURN( %3 )    ; índice 1 de Vector para Var
+	mov 	esi, [%1]         ; Endereço do Índice 1 para ESI
+	mov 	ebx, [esi]         ; Valor de ESI para EBX
+	mov 	[%1], ebx         ; Valor de EBX para Var
+%ENDMACRO
+
 ; ============================================
 
 ; =====================================================================
@@ -79,8 +113,11 @@ START_PROG:
 %DEFINE Get_Hexa16(ARG1, ARG2)    STR.Get_Hexa_16 ARG1, ARG2
 %DEFINE Get_Hexa32(ARG1, ARG2)    STR.Get_Hexa_32 ARG1, ARG2
 %DEFINE Get_Dec32(ARG1, ARG2)     STR.Get_Dec_32 ARG1, ARG2
+%DEFINE INT.ToString(ARG1, ARG2)  STR.Get_Dec_32 ARG1, ARG2
 %DEFINE Malloc(ARG1, ARG2)        VEC.Malloc_Func ARG1, ARG2
 %DEFINE Free(ARG1)                VEC.Free_Func ARG1
+
+%DEFINE RETURN(OFFS)              ESI, OFFS
 
 %MACRO STR.Write 3
 	jmp 	0x08:%%String
@@ -298,7 +335,7 @@ ret
 	pop  	WORD %3
 %ENDMACRO
 
-%MACRO PCI.Restore_Args1 3
+%MACRO PCI.Restore_Args1 0
 	pop 	ax
 	pop     bx
 	pop  	dx
