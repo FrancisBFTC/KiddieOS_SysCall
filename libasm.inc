@@ -26,9 +26,16 @@ START_PROG:
 ; Entry & End of program
 
 %MACRO .Main 2
-	%1 db 0
-	%2 db END_PROG
+	%1 dd 0
+	%2 dd 0
 	_MAIN:
+		push 	ebp
+		mov 	ebp, esp
+		mov 	esi, DWORD[ebp + 12]           
+		mov 	DWORD[ %2 ], esi			    ; Transfira endereço dos argumentos para ARGV
+		mov 	ecx, DWORD[ebp + 16]
+		mov 	DWORD[ %1 ], ecx                ; Transfira endereço do count de args para ARGC
+		pop 	ebp
 		pushad	
 %ENDMACRO 
 
@@ -112,6 +119,7 @@ START_PROG:
 %DEFINE Printz(ARG1, ARG2)        STR.Write_Till_Zero ARG1, ARG2
 %DEFINE Get_Hexa16(ARG1, ARG2)    STR.Get_Hexa_16 ARG1, ARG2
 %DEFINE Get_Hexa32(ARG1, ARG2)    STR.Get_Hexa_32 ARG1, ARG2
+%DEFINE HEX.ToString(ARG1, ARG2)  STR.Get_Hexa_32 ARG1, ARG2
 %DEFINE Get_Dec32(ARG1, ARG2)     STR.Get_Dec_32 ARG1, ARG2
 %DEFINE INT.ToString(ARG1, ARG2)  STR.Get_Dec_32 ARG1, ARG2
 %DEFINE Malloc(ARG1, ARG2)        VEC.Malloc_Func ARG1, ARG2
