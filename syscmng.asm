@@ -17,6 +17,8 @@ PROGRAM_VRAM    EQU CODE32_VRAM+0x2000
  
 Return_Value dw 0
 Counter 	 db 0
+Params       dd 0
+ArgsAddr 	 dd 0
 
 
 ; ==================================================================
@@ -33,7 +35,12 @@ SwitchTo32BIT:
 	call 	EnableA20       ; Habilite o portão A20 (usa o método rápido como prova de conceito)
     cli
 	
-	push 	dx
+	mov 	dword[ArgsAddr], esi
+	shl 	ecx, 16
+	mov 	cx, dx
+	mov 	dword[Params], ecx
+	
+	;push 	dx
 	
 	; // ICW1
     __WritePort 0x20, 0x11  ; Reinicia o controlador
@@ -55,7 +62,7 @@ SwitchTo32BIT:
     __WritePort 0x21, 0x00  ; Habilita as interrupções (Não-Mascaráveis)
     __WritePort 0xA1, 0x00
 	
-	pop 	dx
+	;pop 	dx
 	
 	mov		ax, 0x0C00
 	mov		ds,ax
@@ -68,6 +75,8 @@ SwitchTo32BIT:
 	ja 		NotLoadStructsAgain
 	
 	push 	eax
+	;push 	esi
+	;push 	ecx
 	mov 	si, IDT_Start
 	mov 	di, Vector.Address 
 	mov 	cx, IDTSIZE
@@ -82,6 +91,8 @@ FillIDT:
 	add 	si, 8
 	add 	di, 4
 	loop 	FillIDT
+	;pop 	ecx
+	;pop 	esi
 	pop 	eax
 	
 	add 	[GDT+2], eax           ; Adicione o endereço linear básico ao endereço GDT_Start
@@ -98,7 +109,12 @@ NotLoadStructsAgain:
 	mov 	edi, ProtectedMode16     ;  EDI = entrada de modo protegido de 16 bits (endereço linear)
 	add 	edi, ebx                 ;  Endereço linear de ProtectedMode16
 	add 	ebx, Code32Bit  		 ;  EBX = (CS << 4) + Code32Bit
-
+	
+	;push 	dx
+	;mov 	edx, ecx              ; Transfira quantidade de argumentos Shell
+	;shl 	edx, 16               ; Para byte alto de EDX
+	;pop 	dx
+	
 	push 	ds
 	push 	es
 	push 	fs
@@ -207,8 +223,11 @@ BITS 32
 SECTION protectedmode vstart=CODE32_VRAM, valign=4
 
 Start32:
-	mov 	si, dx
+	;mov 	ebx, esi             ; Armazene o endereço dos argumentos Shell em EBX
+	;mov 	si, dx               ; Coordenadas de cursor de DX para SI
 	mov 	ebp, esp
+	;mov 	[Params], edx        ; Transfira Byte Alto de EDX para EAX (Quantidade de Args da CLI)
+	                             ; E Byte Baixo sendo região do Cursor
 	mov 	edx, ss
 	
     cld
@@ -227,13 +246,16 @@ Start32:
 	push 	ebp
 	push 	ecx
 	
-	mov 	dx, si
+	;mov 	dx, si
+	;mov 	eax, [Params]
 	
 	; A pilha vai crescer para baixo a partir deste local
+	push 	esi
 	mov 	edi,CODE32_VRAM    ; EDI = endereço linear onde o código PM será copiado
     mov 	esi,ebx            ; ESI = endereço linear de Code32Bit
     mov 	ecx,PMSIZE_LONG    ; ECX = número de DWORDs para copiar
     rep 	movsd              ; Copie todos os códigos/dados de Code32Bit para CODE32_VRAM
+	pop 	esi
 	call 	CODE_SEG32:EntryCode32
 	
 	
@@ -244,8 +266,13 @@ Start32:
 	
 
 EntryCode32:
-	mov 	byte[CursorRaw], dh
-	mov 	byte[CursorCol], dl
+	mov 	esi, dword[ArgsAddr+0xC000]
+	mov 	eax, dword[Params+0xC000]
+	mov 	byte[CursorRaw], ah
+	mov 	byte[CursorCol], al
+	shr 	eax, 16
+	push 	eax
+	push 	esi
 	
 	cmp 	byte[Counter+0xC000], 0
 	ja 		NoLoadTSSAgain
@@ -260,6 +287,9 @@ NoLoadTSSAgain:
     mov 	ecx, DWORD[PROGRAM_BUFFER+5]              ; ECX = numero de DWORDs para copiar
     rep 	movsb	   	           ; Copiar todas as ECX dwords de ESI para EDI 
     call 	CODE_SEG32:PROGRAM_VRAM   ; Salto absoluto para o novo endereço
+	
+	pop 	esi
+	pop 	ecx
 	
 	;mov 	eax, 2
 	;mov 	edi, PROGRAM_VRAM
